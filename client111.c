@@ -1,82 +1,52 @@
-#include <unistd.h>
+#include<stdio.h>                                                               
+#include<unistd.h>
+#include<sys/socket.h>
+#include<sys/types.h>
+#include<string.h>
+#include<netinet/in.h>
+#include<arpa/inet.h>
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <signal.h>
+#define SERVER_PORT 9999
+#define SERVER_IP "192.168.43.121"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-
-#define ERR_EXIT(m) \
-        do \
-        { \
-                perror(m); \
-                exit(EXIT_FAILURE); \
-        } while(0)
-
-void handler(int sig)
+int main(int argc, char *argv[])
 {
-    printf("recv a sig=%d\n", sig);
-    exit(EXIT_SUCCESS);
-}
-
-int main(void)
-{
-    int sock;
-    if ((sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-        ERR_EXIT("socket");
-
-    struct sockaddr_in servaddr;
-    memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(5188);
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    if (connect(sock, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0)
-        ERR_EXIT("connect");
-
-    pid_t pid;
-    pid = fork();
-    if (pid == -1)
-        ERR_EXIT("fork");
-
-    if (pid == 0)
-    {
-        char recvbuf[1024];
-        while (1)
-        {
-            memset(recvbuf, 0, sizeof(recvbuf));
-            int ret = read(sock, recvbuf, sizeof(recvbuf));
-            if (ret == -1)
-                ERR_EXIT("read");
-            else if (ret == 0)
-            {
-                printf("peer close\n");
-                break;
-            }
-            
-            fputs(recvbuf, stdout);
-        }
-        close(sock);
-        kill(getppid(), SIGUSR1);
+    if(argc != 2)
+    {   printf("Usage: client IP \n");
+        return 1;
     }
-    else
+    char *str = argv[1];
+    char buf[1024];
+    memset(buf, '\0', sizeof(buf));
+
+    struct sockaddr_in server_sock;
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    bzero(&server_sock, sizeof(server_sock));
+    server_sock.sin_family = AF_INET;
+    inet_pton(AF_INET, SERVER_IP, &server_sock.sin_addr);
+    server_sock.sin_port = htons(SERVER_PORT);
+    int ret = connect(sock, (struct sockaddr*)&server_sock, sizeof(server_sock));
+    if(ret < 0)
     {
-        signal(SIGUSR1, handler);
-        char sendbuf[1024] = {0};
-        while (fgets(sendbuf, sizeof(sendbuf), stdin) != NULL)
-        {
-            write(sock, sendbuf, strlen(sendbuf));
-            memset(sendbuf, 0, sizeof(sendbuf));
-        }
-        close(sock);
+        printf("perror");
+        return 1;
     }
-
-
-    
+    printf("connect success....\n");
+    while(1)
+    {
+        printf("client#:");
+        fgets(buf, sizeof(buf), stdin);
+        buf[strlen(buf)-1] = '\0';
+        write(sock, buf, sizeof(buf));
+        if(strncasecmp(buf, "quit", 4) == 0)
+        {
+            perror("perror");
+            break;
+        }
+        printf("please wait...\n");
+        read(sock, buf, sizeof(buf));
+        printf("server$: %s\n",buf);                                            
+    }
+    close(sock);
     return 0;
 }
